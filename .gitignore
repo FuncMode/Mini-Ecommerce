@@ -1,0 +1,9 @@
+# Compiled
+/bin/
+*.class
+
+# Library jars
+/lib/*.jar
+
+# Secrets
+.env
