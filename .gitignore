@@ -1,6 +1,8 @@
-# Compiled
-/bin/
-*.class
-
 # Secrets
 .env
+
+# Build output
+bin/
+
+# Git itself
+.gitignore
