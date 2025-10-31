@@ -466,7 +466,38 @@ public class Main {
         currentUser = null;
     }
 
+    // public static void main(String[] args) {
+    //     Scanner scanner = new Scanner(System.in);
+    //     Main app = new Main(scanner);
+    //     app.appRun();
+    //     scanner.close();
+    // }
+
     public static void main(String[] args) {
+        boolean isServer = System.getenv("RAILWAY_ENVIRONMENT") != null;
+
+        if (isServer) {
+            System.out.println("🚀 Running in Railway (server) mode — interactive input disabled.");
+            System.out.println("🔗 Testing DB connection...");
+
+            try (Connection conn = DBConnection.getConnection()) {
+                if (conn != null) {
+                    System.out.println("✅ Connected successfully!");
+                    ResultSet rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM devices");
+                    if (rs.next()) {
+                        System.out.println("📦 Devices available in DB: " + rs.getInt(1));
+                    }
+                } else {
+                    System.out.println("⚠️ Could not establish DB connection.");
+                }
+            } catch (Exception e) {
+                System.out.println("❌ DB test failed: " + e.getMessage());
+            }
+
+            System.out.println("🛑 Application exited (no console input allowed on Railway).");
+            return;
+        }
+
         Scanner scanner = new Scanner(System.in);
         Main app = new Main(scanner);
         app.appRun();
