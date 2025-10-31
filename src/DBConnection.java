@@ -1,3 +1,51 @@
+// import java.sql.Connection;
+// import java.sql.DriverManager;
+// import java.sql.SQLException;
+// import java.io.FileInputStream;
+// import java.io.IOException;
+// import java.util.Properties;
+
+// public class DBConnection {
+
+//     private static String URL;
+//     private static String USER;
+//     private static String PASSWORD;
+
+//     static {
+//         try {
+//             Properties env = new Properties();
+//             env.load(new FileInputStream(".env"));
+
+//             URL = env.getProperty("DB_URL");
+//             USER = env.getProperty("DB_USER");
+//             PASSWORD = env.getProperty("DB_PASSWORD");
+//         } catch (IOException e) {
+//             System.out.println(" Could not load .env file: " + e.getMessage());
+//         }
+//     }
+
+//     public static Connection getConnection() {
+//         Connection connection = null;
+//         try {
+            
+//             Class.forName("com.mysql.cj.jdbc.Driver");
+
+//             connection = DriverManager.getConnection(URL, USER, PASSWORD);
+//         } catch (ClassNotFoundException e) {
+//             System.out.println(" JDBC Driver not found: " + e.getMessage());
+//         } catch (SQLException e) {
+//             System.out.println(" Connection failed: " + e.getMessage());
+//         }
+//         return connection;
+//     }
+
+//     public static void main(String[] args) {
+//         // test
+//         getConnection();
+//     }
+// }
+
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -12,25 +60,35 @@ public class DBConnection {
     private static String PASSWORD;
 
     static {
-        try {
-            Properties env = new Properties();
-            env.load(new FileInputStream(".env"));
+        URL = System.getenv("DB_URL");
+        USER = System.getenv("DB_USER");
+        PASSWORD = System.getenv("DB_PASS"); 
 
-            URL = env.getProperty("DB_URL");
-            USER = env.getProperty("DB_USER");
-            PASSWORD = env.getProperty("DB_PASSWORD");
-        } catch (IOException e) {
-            System.out.println(" Could not load .env file: " + e.getMessage());
+        if (URL == null || USER == null || PASSWORD == null) {
+            try {
+                Properties env = new Properties();
+                env.load(new FileInputStream(".env"));
+
+                URL = env.getProperty("DB_URL");
+                USER = env.getProperty("DB_USER");
+                // support both DB_PASS and DB_PASSWORD
+                PASSWORD = env.getProperty("DB_PASS", env.getProperty("DB_PASSWORD"));
+
+                System.out.println(" Loaded DB credentials from .env file");
+            } catch (IOException e) {
+                System.out.println(" Could not load .env file: " + e.getMessage());
+            }
+        } else {
+            System.out.println(" Loaded DB credentials from Render environment");
         }
     }
 
     public static Connection getConnection() {
         Connection connection = null;
         try {
-            
             Class.forName("com.mysql.cj.jdbc.Driver");
-
             connection = DriverManager.getConnection(URL, USER, PASSWORD);
+            System.out.println(" Database connected successfully!");
         } catch (ClassNotFoundException e) {
             System.out.println(" JDBC Driver not found: " + e.getMessage());
         } catch (SQLException e) {
@@ -40,7 +98,7 @@ public class DBConnection {
     }
 
     public static void main(String[] args) {
-        // test
+        // Simple test
         getConnection();
     }
 }

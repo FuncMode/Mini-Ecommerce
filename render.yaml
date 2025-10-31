@@ -1,0 +1,6 @@
+services:
+  - type: worker
+    name: ecommerce-console
+    env: java
+    buildCommand: javac -d bin -cp "lib/mysql-connector-j-9.5.0.jar" src/*.java
+    startCommand: java -cp "bin:lib/mysql-connector-j-9.5.0.jar" Main
