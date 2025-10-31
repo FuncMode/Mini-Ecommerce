@@ -72,7 +72,6 @@ public class DBConnection {
                 USER = env.getProperty("DB_USER");
                 PASSWORD = env.getProperty("DB_PASS", env.getProperty("DB_PASSWORD"));
 
-                System.out.println(" Loaded DB credentials from .env (local mode)");
             } catch (IOException e) {
                 System.out.println(" Could not load .env file: " + e.getMessage());
             }
@@ -89,7 +88,6 @@ public class DBConnection {
 
             // ✅ Try to connect
             connection = DriverManager.getConnection(URL, USER, PASSWORD);
-            System.out.println(" Database connected successfully!");
         } catch (ClassNotFoundException e) {
             System.out.println(" JDBC Driver not found: " + e.getMessage());
         } catch (SQLException e) {
