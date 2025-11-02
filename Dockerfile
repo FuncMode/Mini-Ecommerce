@@ -7,6 +7,6 @@ COPY lib/ /app/lib/
 
 RUN mkdir -p /app/bin
 
-RUN javac -d bin -cp "lib/mysql-connector-j-9.5.0.jar" src/*.java
+RUN javac -d bin -cp "lib/mysql-connector-j-9.5.0.jar;lib/gson-2.10.1.jar" src/*.java
 
-CMD ["java", "-cp", "bin:lib/mysql-connector-j-9.5.0.jar", "Main"]
+CMD ["java", "-cp", "bin;lib/mysql-connector-j-9.5.0.jar;lib/gson-2.10.1.jar", "Main"]
