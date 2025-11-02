@@ -1,5 +1,9 @@
 import java.sql.*;
 import java.util.*;
+import java.net.http.*;
+import java.net.URI;
+import com.google.gson.*;
+import java.text.NumberFormat;
 
 public class Main {
     private Scanner scanner;
@@ -9,98 +13,98 @@ public class Main {
         this.scanner = scanner;
     }
 
-    public void appRun() {
+    // ===================== APPLICATION ENTRY =====================
+    public static void main(String[] args) {
+        boolean isServer = System.getenv("RAILWAY_ENVIRONMENT") != null;
+
+        if (isServer) {
+            System.out.println("Running in Railway (server) mode — console input disabled.");
+            return;
+        }
+
+        Scanner scanner = new Scanner(System.in);
+        Main app = new Main(scanner);
+        app.run();
+        scanner.close();
+    }
+
+    // ===================== MAIN MENU =====================
+    public void run() {
         clear();
         System.out.println(" === Welcome to Mini E-Commerce ===");
+
         while (true) {
             System.out.println("\n 1. Register");
             System.out.println(" 2. Login");
             System.out.println(" 3. Exit");
 
-            String choice = showUserPrompt("\n Choose an option: ");
-
-            if (choice.isBlank()) {
-                clear();
-                System.out.println(" Input cannot be empty!");
-                continue;
-            }
+            String choice = prompt("\n Choose an option: ");
 
             switch (choice) {
-                case "1" -> {
-                    clear();
-                    registerUser();
-                }
-                case "2" -> {
-                    if (loginUser()) {
-                        showMenu();
-                    }
-                }
-                case "3" -> {
-                    clear();
-                    System.out.println("Thanks for using our Mini-Ecommerce!");
-                    return;
-                }
-                default -> {
-                    clear();
-                    System.out.println(" Invalid option, try again.");
-                }
+                case "1" -> registerUser();
+                case "2" -> { if (loginUser()) menu(); }
+                case "3" -> { clear(); System.out.println(" Thanks for using Mini-Ecommerce!"); return; }
+                default -> message(" Invalid option.");
             }
         }
     }
 
+    // ===================== BASIC UTILS =====================
     private void clear() {
         try {
-            if (System.getProperty("os.name").contains("Windows")) {
+            if (System.getProperty("os.name").contains("Windows"))
                 new ProcessBuilder("cmd", "/c", "cls").inheritIO().start().waitFor();
-            } else {
-                System.out.print("\033[H\033[2J");
-                System.out.flush();
-            }
-        } catch (Exception e) {
-            System.out.println("Unable to clear console.");
-        }
+            else System.out.print("\033[H\033[2J");
+        } catch (Exception ignored) {}
     }
 
-    private String showUserPrompt(String prompt) {
-        System.out.print(prompt);
-        return scanner.nextLine();
+    private String prompt(String text) {
+        System.out.print(text);
+        return scanner.nextLine().trim();
     }
 
-    private boolean validateInput(String input, String fieldName) {
-        if (input == null || input.trim().isEmpty()) {
-            System.out.println(" " + fieldName + " cannot be empty!");
+    private void message(String msg) {
+        clear();
+        System.out.println(" " + msg);
+    }
+
+    private boolean validateInput(String input, String type) {
+        if (input.isEmpty()) {
+            System.out.println(" " + type + " cannot be empty!");
             return false;
         }
-        if (input.length() < 4) {
-            System.out.println(" " + fieldName + " must be at least 4 characters!");
+
+        if (input.length() < 6) {
+            System.out.println(type + " must be at least 6 characters!");
             return false;
         }
-        if (!input.matches("[A-Za-z]+") && fieldName.equals("Username")) {
-            System.out.println(" Please input valid characters!");
+
+        if (type.equals("Password") && !input.matches(".*\\d.*")) {
+            System.out.println(" Password must include at least 1 number!");
             return false;
         }
+
         return true;
     }
 
+    // ===================== USER SYSTEM =====================
     private void registerUser() {
         clear();
-        System.out.println("\n                 -USER REGISTRATION-                ");
-        String username, password;
+        System.out.println("\n ===== USER REGISTRATION =====");
 
+        String username;
         while (true) {
-            username = showUserPrompt("\n Enter username: ");
+            username = prompt(" Enter username: ");
             if (!validateInput(username, "Username")) continue;
-
-            if (userExists(username)) {
-                System.out.println(" Username already exists. Try another.");
-                continue;
-            }
+            if (userExists(username)) { System.out.println(" Username already taken."); continue; }
             break;
         }
 
+        String password;
         while (true) {
-            password = showUserPrompt(" Enter password: ");
-            if (validateInput(password, "Password")) break;
+            password = prompt(" Enter password: ");
+            if (!validateInput(password, "Password")) continue;
+            break;
         }
 
         try (Connection conn = DBConnection.getConnection();
@@ -108,8 +112,7 @@ public class Main {
             ps.setString(1, username);
             ps.setString(2, password);
             ps.executeUpdate();
-            clear();
-            System.out.println("\n Registration successful! You can now log in.");
+            message(" Registration successful!");
         } catch (SQLException e) {
             System.out.println(" Registration failed: " + e.getMessage());
         }
@@ -117,390 +120,260 @@ public class Main {
 
     private boolean userExists(String username) {
         try (Connection conn = DBConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement("SELECT * FROM users WHERE username = ?")) {
+            PreparedStatement ps = conn.prepareStatement("SELECT 1 FROM users WHERE username=?")) {
             ps.setString(1, username);
-            ResultSet rs = ps.executeQuery();
-            return rs.next();
-        } catch (SQLException e) {
-            System.out.println(" DB Error: " + e.getMessage());
-            return false;
-        }
+            return ps.executeQuery().next();
+        } catch (Exception e) { return false; }
     }
 
-    private boolean loginUser() {
-        clear();
-        System.out.println("\n                     -LOGIN-                        ");
+private boolean loginUser() {
+    clear();
+    System.out.println("\n ===== LOGIN ===== \n");
 
-        String username = showUserPrompt("\n Username: ");
-        String password = showUserPrompt(" Password: ");
+    String username;
+    while (true) {
+        username = prompt(" Username: ");
+        if (username.isBlank() || username.length() < 6) {
+            System.out.println(" Username must be at least 6 characters. Please try again.");
+            continue;
+        }
+        break;
+    }
 
-        try (Connection conn = DBConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement("SELECT * FROM users WHERE username = ? AND password = ?")) {
+    String password;
+    while (true) {
+        password = prompt(" Password: ");
+        if (password.isBlank() || password.length() < 6) {
+            System.out.println(" Password must be at least 6 characters. Please try again.");
+            continue;
+        }
+        break;
+    }
+
+    try (Connection conn = DBConnection.getConnection()) {
+        try (PreparedStatement ps = conn.prepareStatement("SELECT password FROM users WHERE username=?")) {
             ps.setString(1, username);
-            ps.setString(2, password);
             ResultSet rs = ps.executeQuery();
 
-            if (rs.next()) {
-                currentUser = username;
-                clear();
-                System.out.println(" ==================================================");
-                System.out.println("                 WELCOME, " + username.toUpperCase() + "!           ");
-                System.out.println(" ==================================================");
-                System.out.println(" Login successful! Redirecting to the main menu...");
-                return true;
-            } else {
-                clear();
-                System.out.println(" Invalid credentials. Please try again.\n");
+            if (!rs.next()) {
+                System.out.println(" Username not found. Please register first.");
                 return false;
             }
-        } catch (SQLException e) {
-            System.out.println(" Login failed: " + e.getMessage());
-            return false;
+
+            String correctPassword = rs.getString("password");
+            if (!correctPassword.equals(password)) {
+                System.out.println(" Wrong password. Please check your password.");
+                return false;
+            }
         }
+
+        currentUser = username;
+        System.out.println(" Welcome, " + username + "!");
+        return true;
+
+    } catch (SQLException e) {
+        System.out.println(" Login failed: " + e.getMessage());
+        return false;
+    }
+}
+
+
+    // ===================== PRODUCT FETCH =====================
+    private List<Map<String, Object>> getProducts() {
+        List<Map<String, Object>> list = new ArrayList<>();
+        double conversionRate = 56.0; // USD → PHP example
+
+        try {
+            HttpResponse<String> res = HttpClient.newHttpClient().send(
+                    HttpRequest.newBuilder().uri(URI.create("https://fakestoreapi.com/products")).build(),
+                    HttpResponse.BodyHandlers.ofString()
+            );
+
+            JsonArray arr = JsonParser.parseString(res.body()).getAsJsonArray();
+            for (JsonElement el : arr) {
+                JsonObject o = el.getAsJsonObject();
+                Map<String, Object> p = new HashMap<>();
+                p.put("id", o.get("id").getAsInt());
+                p.put("name", o.get("title").getAsString());
+                double phpPrice = o.get("price").getAsDouble() * conversionRate;
+                p.put("price", phpPrice);
+                list.add(p);
+            }
+        } catch (Exception e) {
+            System.out.println(" Failed to load products: " + e.getMessage());
+        }
+
+        return list;
     }
 
-    private void showMenu() {
+    // ===================== MENU =====================
+    private void menu() {
+        NumberFormat pesoFormat = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("en-PH"));
+
         while (true) {
-            List<String> devices = getDevices();
+            clear();
+            List<Map<String, Object>> p = getProducts();
 
-            System.out.println("\n           === Device List ===");
-            System.out.printf(" %-5s %-20s %-10s %-10s%n", "No.", "Device", "Price", "Stock");
-            System.out.println(" ----------------------------------------------");
+            System.out.println("\n ===== PRODUCT LIST =====");
+            for (int i = 0; i < p.size(); i++)
+                System.out.printf(" %d. %s (%s)\n", i + 1, p.get(i).get("name"),
+                        pesoFormat.format((double) p.get(i).get("price")));
 
-            for (String device : devices) {
-                System.out.println(device);
-            }
+            System.out.println("\n 1. Add to Cart");
+            System.out.println(" 2. Remove from Cart");
+            System.out.println(" 3. View Cart");
+            System.out.println(" 4. Checkout");
+            System.out.println(" 5. Logout");
 
-            System.out.println("\n Options:");
-            System.out.println(" [1]. Add to Cart");
-            System.out.println(" [2]. Remove from Cart");
-            System.out.println(" [3]. View Cart");
-            System.out.println(" [4]. Checkout");
-            System.out.println(" [5]. Logout");
-
-            String choice = showUserPrompt("\n Choose an option: ");
-            switch (choice) {
-                case "1" -> addItemToCart();
-                case "2" -> removeItemFromCart();
+            switch (prompt("\n Choose: ")) {
+                case "1" -> addToCart(p);
+                case "2" -> removeFromCart();
                 case "3" -> viewCart();
                 case "4" -> checkout();
                 case "5" -> {
                     logout();
                     return;
                 }
-                default -> {
-                    clear();
-                    System.out.println(" Invalid option!");
-                }
+                default -> message(" Invalid option.");
             }
         }
     }
 
-    private List<String> getDevices() {
-        List<String> list = new ArrayList<>();
-        try (Connection conn = DBConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement("SELECT * FROM devices")) {
-            ResultSet rs = ps.executeQuery();
-            int index = 1;
-            while (rs.next()) {
-                list.add(String.format(" %-5d %-20s $%-9.2f   %-10d",
-                        index++, rs.getString("name"), rs.getDouble("price"), rs.getInt("stock")));
-            }
-        } catch (SQLException e) {
-            System.out.println(" DB Error: " + e.getMessage());
-        }
-        return list;
-    }
-
-    // ================== ADD TO CART ==================
-    private void addItemToCart() {
-        clear();
-        List<String> deviceNames = new ArrayList<>();
-        System.out.println("\n           === Device List ===");
-        System.out.printf(" %-5s %-20s %-10s %-10s%n", "No.", "Device", "Price", "Stock");
-        System.out.println(" ----------------------------------------------");
-
-        try (Connection conn = DBConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement("SELECT * FROM devices")) {
-            ResultSet rs = ps.executeQuery();
-            int index = 1;
-            while (rs.next()) {
-                String name = rs.getString("name");
-                double price = rs.getDouble("price");
-                int stock = rs.getInt("stock");
-                deviceNames.add(name);
-                System.out.printf(" %-5d %-20s $%-9.2f %-10d%n", index++, name, price, stock);
-            }
-        } catch (SQLException e) {
-            System.out.println(" DB Error: " + e.getMessage());
-            return;
-        }
-
-        String input = showUserPrompt("\n Enter the number of the device to add: ");
+    // ===================== CART SYSTEM =====================
+    private void addToCart(List<Map<String, Object>> p) {
         int choice;
-        try {
-            choice = Integer.parseInt(input);
-            if (choice < 1 || choice > deviceNames.size()) {
-                System.out.println(" Invalid choice!");
-                return;
-            }
-        } catch (NumberFormatException e) {
-            System.out.println(" Invalid number!");
-            return;
-        }
+        try { choice = Integer.parseInt(prompt(" Enter product number: ")); }
+        catch (Exception e) { return; }
+        if (choice < 1 || choice > p.size()) return;
 
-        int quantity;
-        try {
-            quantity = Integer.parseInt(showUserPrompt(" Enter quantity: "));
-            if (quantity <= 0) {
-                System.out.println(" Quantity must be positive!");
-                return;
-            }
-        } catch (NumberFormatException e) {
-            System.out.println(" Invalid quantity!");
-            return;
-        }
+        int qty;
+        try { qty = Integer.parseInt(prompt(" Enter quantity: ")); }
+        catch (Exception e) { return; }
+        if (qty <= 0) return;
 
-        String deviceName = deviceNames.get(choice - 1);
+        Map<String, Object> item = p.get(choice - 1);
 
-        try (Connection conn = DBConnection.getConnection()) {
-            PreparedStatement psCheck = conn.prepareStatement("SELECT stock FROM devices WHERE name=?");
-            psCheck.setString(1, deviceName);
-            ResultSet rs = psCheck.executeQuery();
-
-            if (!rs.next()) {
-                clear();
-                System.out.println(" Device not found!");
-                return;
-            }
-
-            int stock = rs.getInt("stock");
-            if (stock < quantity) {
-                clear();
-                System.out.println(" Not enough stock available!");
-                return;
-            }
-
-            PreparedStatement psInsert = conn.prepareStatement(
-                    "INSERT INTO carts (username, device_name, quantity) VALUES (?, ?, ?) " +
-                            "ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)");
-            psInsert.setString(1, currentUser);
-            psInsert.setString(2, deviceName);
-            psInsert.setInt(3, quantity);
-            psInsert.executeUpdate();
-
-            PreparedStatement psUpdateStock = conn.prepareStatement("UPDATE devices SET stock = stock - ? WHERE name = ?");
-            psUpdateStock.setInt(1, quantity);
-            psUpdateStock.setString(2, deviceName);
-            psUpdateStock.executeUpdate();
-
-            clear();
-            System.out.println(" " + quantity + " x " + deviceName + " added to cart!");
-        } catch (SQLException e) {
-            System.out.println(" Add to cart failed: " + e.getMessage());
-        }
-    }
-
-    // ================== REMOVE FROM CART ==================
-    private void removeItemFromCart() {
-        clear();
-        List<String> cartItems = new ArrayList<>();
-        List<Integer> cartQuantities = new ArrayList<>();
-        
         try (Connection conn = DBConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement("SELECT * FROM carts WHERE username=?")) {
+            PreparedStatement ps = conn.prepareStatement(
+                    "INSERT INTO carts (username, product_id, product_name, price, quantity) VALUES (?, ?, ?, ?, ?) " +
+                            "ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)")) {
             ps.setString(1, currentUser);
-            ResultSet rs = ps.executeQuery();
-
-            if (!rs.isBeforeFirst()) {
-                System.out.println(" Your cart is empty. Nothing to remove.");
-                return;
-            }
-
-            System.out.println("\n ================== YOUR CART ==================");
-            System.out.printf(" %-5s %-20s %-10s %-10s%n", "No.", "Item", "Qty", "Price");
-            System.out.println(" ----------------------------------------------");
-
-            int index = 1;
-            while (rs.next()) {
-                String item = rs.getString("device_name");
-                int qty = rs.getInt("quantity");
-                double price = getPrice(item);
-                cartItems.add(item);
-                cartQuantities.add(qty);
-                System.out.printf(" %-5d %-20s %-10d $%-9.2f%n", index++, item, qty, price);
-            }
-
-            String input = showUserPrompt("\n Enter the number of the item to remove: ");
-            int choice;
-            try {
-                choice = Integer.parseInt(input);
-                if (choice < 1 || choice > cartItems.size()) {
-                    System.out.println(" Invalid choice!");
-                    return;
-                }
-            } catch (NumberFormatException e) {
-                System.out.println(" Invalid number!");
-                return;
-            }
-
-            int quantity;
-            try {
-                quantity = Integer.parseInt(showUserPrompt(" Enter quantity to remove: "));
-                if (quantity <= 0) {
-                    System.out.println(" Quantity must be positive!");
-                    return;
-                }
-            } catch (NumberFormatException e) {
-                System.out.println(" Invalid quantity!");
-                return;
-            }
-
-            String itemToRemove = cartItems.get(choice - 1);
-            int currentQty = cartQuantities.get(choice - 1);
-
-            try (Connection conn2 = DBConnection.getConnection()) {
-                if (quantity >= currentQty) {
-                    PreparedStatement del = conn2.prepareStatement("DELETE FROM carts WHERE username=? AND device_name=?");
-                    del.setString(1, currentUser);
-                    del.setString(2, itemToRemove);
-                    del.executeUpdate();
-                } else {
-                    PreparedStatement upd = conn2.prepareStatement("UPDATE carts SET quantity=quantity-? WHERE username=? AND device_name=?");
-                    upd.setInt(1, quantity);
-                    upd.setString(2, currentUser);
-                    upd.setString(3, itemToRemove);
-                    upd.executeUpdate();
-                }
-
-                PreparedStatement restore = conn2.prepareStatement("UPDATE devices SET stock=stock+? WHERE name=?");
-                restore.setInt(1, quantity);
-                restore.setString(2, itemToRemove);
-                restore.executeUpdate();
-
-                clear();
-                System.out.println(" Removed " + quantity + " x " + itemToRemove + " from cart.");
-            } catch (SQLException e) {
-                System.out.println(" Remove failed: " + e.getMessage());
-            }
-
-        } catch (SQLException e) {
-            System.out.println(" DB Error: " + e.getMessage());
+            ps.setInt(2, (int) item.get("id"));
+            ps.setString(3, (String) item.get("name"));
+            ps.setDouble(4, (double) item.get("price"));
+            ps.setInt(5, qty);
+            ps.executeUpdate();
+            message("Added to cart!");
+        } catch (Exception e) {
+            System.out.println(" Add failed: " + e.getMessage());
         }
     }
+
+    private void removeFromCart() {
+    try (Connection conn = DBConnection.getConnection();
+         PreparedStatement ps = conn.prepareStatement("SELECT * FROM carts WHERE username=?")) {
+        ps.setString(1, currentUser);
+        ResultSet rs = ps.executeQuery();
+
+        List<Integer> ids = new ArrayList<>();
+        List<Integer> qtys = new ArrayList<>();
+        int i = 1;
+        while (rs.next()) {
+            System.out.printf(" %d. %s (x%d)\n", i++, rs.getString("product_name"), rs.getInt("quantity"));
+            ids.add(rs.getInt("product_id"));
+            qtys.add(rs.getInt("quantity"));
+        }
+        if (ids.isEmpty()) { message("Cart is empty."); return; }
+
+        int ch;
+        try { ch = Integer.parseInt(prompt(" Select item: ")); }
+        catch (Exception e) { return; }
+        if (ch < 1 || ch > ids.size()) return;
+
+        int currentQty = qtys.get(ch - 1);
+        int toRemove = 1;
+
+        if (currentQty > 1) {
+            String input = prompt("Item has " + currentQty + " pcs. How many to remove? ");
+            try { toRemove = Integer.parseInt(input); }
+            catch (Exception e) { return; }
+
+            if (toRemove < 1) toRemove = 1;
+            if (toRemove > currentQty) toRemove = currentQty;
+        }
+
+        if (toRemove >= currentQty) {
+            // delete row if removing all
+            try (PreparedStatement del = conn.prepareStatement("DELETE FROM carts WHERE username=? AND product_id=?")) {
+                del.setString(1, currentUser);
+                del.setInt(2, ids.get(ch - 1));
+                del.executeUpdate();
+            }
+        } else {
+            // decrease quantity
+            try (PreparedStatement upd = conn.prepareStatement("UPDATE carts SET quantity = quantity - ? WHERE username=? AND product_id=?")) {
+                upd.setInt(1, toRemove);
+                upd.setString(2, currentUser);
+                upd.setInt(3, ids.get(ch - 1));
+                upd.executeUpdate();
+            }
+        }
+
+        message("Removed " + toRemove + " item(s).");
+
+    } catch (Exception e) {
+        System.out.println(" Remove failed: " + e.getMessage());
+    }
+}
+
 
     private void viewCart() {
         clear();
-        System.out.println("\n ================== YOUR CART ==================");
+        NumberFormat pesoFormat = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("en-PH"));
+        System.out.println("\n ===== YOUR CART =====");
+
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement("SELECT * FROM carts WHERE username=?")) {
             ps.setString(1, currentUser);
             ResultSet rs = ps.executeQuery();
 
-            if (!rs.isBeforeFirst()) {
-                System.out.println(" Your cart is empty.");
-                return;
-            }
-
             double total = 0;
-            int index = 1;
             while (rs.next()) {
-                String item = rs.getString("device_name");
-                int qty = rs.getInt("quantity");
-                double price = getPrice(item);
-                double subtotal = qty * price;
-                total += subtotal;
-                System.out.printf(" %-5d %-20s %-10d $%-9.2f $%-9.2f%n", index++, item, qty, price, subtotal);
+                double sub = rs.getDouble("price") * rs.getInt("quantity");
+                total += sub;
+                System.out.printf(" %s (x%d) - %s\n", rs.getString("product_name"), rs.getInt("quantity"),
+                        pesoFormat.format(sub));
             }
-            System.out.println(" ----------------------------------------------");
-            System.out.printf(" %-5s %-20s %-10s %-10s $%-9.2f%n", "", "", "", "TOTAL:", total);
-        } catch (SQLException e) {
-            System.out.println(" DB Error: " + e.getMessage());
-        }
+            System.out.println(" Total: " + pesoFormat.format(total));
+        } catch (Exception ignored) {}
+        prompt("\n Press Enter...");
     }
 
-    private double getPrice(String name) {
-        try (Connection conn = DBConnection.getConnection();
-            PreparedStatement ps = conn.prepareStatement("SELECT price FROM devices WHERE name=?")) {
-            ps.setString(1, name);
-            ResultSet rs = ps.executeQuery();
-            if (rs.next()) return rs.getDouble("price");
-        } catch (SQLException ignored) {}
-        return 0;
-    }
-
-    // ================== CHECKOUT ==================
     private void checkout() {
         clear();
-        System.out.println("\n               === Checkout ===");
-        double total = 0;
+        NumberFormat pesoFormat = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("en-PH"));
+        System.out.println("\n ===== CHECKOUT =====");
 
         try (Connection conn = DBConnection.getConnection();
-             PreparedStatement psCheck = conn.prepareStatement("SELECT * FROM carts WHERE username=?")) {
-            psCheck.setString(1, currentUser);
-            ResultSet rsCheck = psCheck.executeQuery();
+            PreparedStatement ps = conn.prepareStatement("SELECT price, quantity FROM carts WHERE username=?")) {
+            ps.setString(1, currentUser);
+            ResultSet rs = ps.executeQuery();
 
-            if (!rsCheck.isBeforeFirst()) {
-                System.out.println(" Your cart is empty. Nothing to checkout.");
-                return;
+            double total = 0;
+            while (rs.next()) total += rs.getDouble("price") * rs.getInt("quantity");
+
+            try (PreparedStatement del = conn.prepareStatement("DELETE FROM carts WHERE username=?")) {
+                del.setString(1, currentUser);
+                del.executeUpdate();
             }
 
-            while (rsCheck.next()) {
-                total += getPrice(rsCheck.getString("device_name")) * rsCheck.getInt("quantity");
-            }
-
-            PreparedStatement del = conn.prepareStatement("DELETE FROM carts WHERE username=?");
-            del.setString(1, currentUser);
-            del.executeUpdate();
-
-            System.out.printf(" Total amount: $%.2f%n", total);
-            System.out.println(" Checkout complete! Thank you for your purchase.");
-        } catch (SQLException e) {
-            System.out.println(" Checkout failed: " + e.getMessage());
-        }
+            System.out.println(" Total Paid: " + pesoFormat.format(total));
+            prompt("\n Press Enter to continue...");
+        } catch (Exception ignored) {}
     }
 
     private void logout() {
-        clear();
-        System.out.println(" Logged out successfully, " + currentUser + "!");
+        message("Logged out: " + currentUser);
         currentUser = null;
-    }
-
-    // public static void main(String[] args) {
-    //     Scanner scanner = new Scanner(System.in);
-    //     Main app = new Main(scanner);
-    //     app.appRun();
-    //     scanner.close();
-    // }
-
-    public static void main(String[] args) {
-        boolean isServer = System.getenv("RAILWAY_ENVIRONMENT") != null;
-
-        if (isServer) {
-            System.out.println("🚀 Running in Railway (server) mode — interactive input disabled.");
-            System.out.println("🔗 Testing DB connection...");
-
-            try (Connection conn = DBConnection.getConnection()) {
-                if (conn != null) {
-                    System.out.println("✅ Connected successfully!");
-                    ResultSet rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM devices");
-                    if (rs.next()) {
-                        System.out.println("📦 Devices available in DB: " + rs.getInt(1));
-                    }
-                } else {
-                    System.out.println("⚠️ Could not establish DB connection.");
-                }
-            } catch (Exception e) {
-                System.out.println("❌ DB test failed: " + e.getMessage());
-            }
-
-            System.out.println("🛑 Application exited (no console input allowed on Railway).");
-            return;
-        }
-
-        Scanner scanner = new Scanner(System.in);
-        Main app = new Main(scanner);
-        app.appRun();
-        scanner.close();
     }
 }
