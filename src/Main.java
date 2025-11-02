@@ -28,7 +28,7 @@ public class Main {
         scanner.close();
     }
 
-    // ===================== MAIN MENU =====================
+// ===================== MAIN MENU =====================
     public void run() {
         clear();
         System.out.println(" === Welcome to Mini E-Commerce ===");
@@ -36,18 +36,26 @@ public class Main {
         while (true) {
             System.out.println("\n 1. Register");
             System.out.println(" 2. Login");
-            System.out.println(" 3. Exit");
+            System.out.println(" 3. Open Web Version");
+            System.out.println(" 4. Exit");
 
             String choice = prompt("\n Choose an option: ");
 
             switch (choice) {
                 case "1" -> registerUser();
                 case "2" -> { if (loginUser()) menu(); }
-                case "3" -> { clear(); System.out.println(" Thanks for using Mini-Ecommerce!"); return; }
+                case "3" -> {
+                    clear();
+                    System.out.println(" 🌐 Visit the web version here:");
+                    System.out.println(" https://mini-ecommerce-web-production.up.railway.app/");
+                    prompt("\n Press Enter to return to menu...");
+                }
+                case "4" -> { clear(); System.out.println(" Thanks for using Mini-Ecommerce!"); return; }
                 default -> message(" Invalid option.");
             }
         }
     }
+
 
     // ===================== BASIC UTILS =====================
     private void clear() {
